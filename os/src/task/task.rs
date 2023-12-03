@@ -1,5 +1,7 @@
 //! Types related to task management
 
+use crate::config::MAX_SYSCALL_NUM;
+
 use super::TaskContext;
 
 /// The task control block (TCB) of a task.
@@ -9,6 +11,10 @@ pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     /// The task context
     pub task_cx: TaskContext,
+    /// The task syscall time 
+    pub task_syscall_info: [u32; MAX_SYSCALL_NUM],
+    /// The task first run time
+    pub task_start_time: Option<usize>,
 }
 
 /// The status of a task

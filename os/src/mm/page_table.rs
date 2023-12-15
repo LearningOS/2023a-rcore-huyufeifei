@@ -1,6 +1,9 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use crate::task::current_user_token;
+
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use core::slice::from_raw_parts;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -170,4 +173,36 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// write to
+pub fn write_to(dist: *mut u8, src: *const u8, len: usize) {
+    let page_table = PageTable::from_token(current_user_token());
+    let mut start = dist as usize;
+    let end = start + len;
+    let mut start2 = 0usize;
+    let src2 = unsafe { from_raw_parts(src, len) };
+    // let mut v = Vec::new();
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        let ppn = page_table.translate(vpn).unwrap().ppn();
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        let step = usize::from(end_va) - usize::from(start_va);
+        if end_va.page_offset() == 0 {
+            // v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
+            ppn.get_bytes_array()[start_va.page_offset()..].copy_from_slice(
+                &src2[start2..start2 + step]
+            );
+         } else {
+            // v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
+            ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()].copy_from_slice(
+                &src2[start2..start2 + step]
+            );
+        }
+        start = end_va.into();
+        start2 += step;
+    }
 }

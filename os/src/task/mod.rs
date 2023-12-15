@@ -16,7 +16,9 @@ mod task;
 
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
+use crate::timer::{get_time_ms, get_time_us};
 use crate::trap::TrapContext;
+use crate::syscall::TaskInfo;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -79,6 +81,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.start_time = Some(get_time_ms());
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -140,6 +143,9 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            if let None = inner.tasks[next].start_time {
+                inner.tasks[next].start_time = Some(get_time_ms());
+            }
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -152,6 +158,30 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    /// get task info
+    fn get_task_info(&self) -> TaskInfo {
+        let manager = self.inner.exclusive_access();
+        let current = manager.current_task;
+        let tcb = &manager.tasks[current];
+        TaskInfo {
+            status: tcb.task_status,
+            syscall_times: tcb.syscall_times,
+            time: get_time_us() / 1000 - tcb.start_time.unwrap(),
+        }
+    }
+
+    /// syscall counter
+    fn syscall_count(&self, id: usize) {
+        let mut manager = self.inner.exclusive_access();
+        let cur = manager.current_task;
+        manager.tasks[cur].syscall_times[id] += 1;
+    }
+
+    /// get current task id
+    fn get_current_task(&self) -> usize {
+        self.inner.exclusive_access().current_task
     }
 }
 
@@ -201,4 +231,19 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// get task info
+pub fn get_task_info() -> TaskInfo {
+    TASK_MANAGER.get_task_info()
+}
+
+/// syscall counter
+pub fn syscall_count(id: usize) {
+    TASK_MANAGER.syscall_count(id);
+}
+
+/// get current task id
+pub fn get_current_task() -> usize {
+    TASK_MANAGER.get_current_task()
 }

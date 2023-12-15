@@ -68,6 +68,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// syscall times
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// start time
+    pub start_time: Option<usize>,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +124,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    start_time: None,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -191,6 +199,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    start_time: None, /* parent_inner.start_time */
+                    syscall_times: [0; MAX_SYSCALL_NUM], /* parent_inner.syscall_times | .clone()? */
                 })
             },
         });

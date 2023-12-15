@@ -23,6 +23,9 @@ mod task;
 
 use crate::loader::get_app_data_by_name;
 use alloc::sync::Arc;
+use crate::trap::TrapContext;
+use crate::syscall::TaskInfo;
+use crate::timer::{get_time_ms, get_time_us};
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
@@ -114,4 +117,19 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// get task info
+pub fn get_task_info() -> TaskInfo {
+    TASK_MANAGER.get_task_info()
+}
+
+/// syscall counter
+pub fn syscall_count(id: usize) {
+    TASK_MANAGER.syscall_count(id);
+}
+
+/// get current task id
+pub fn get_current_task() -> usize {
+    TASK_MANAGER.get_current_task()
 }

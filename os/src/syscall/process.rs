@@ -1,11 +1,11 @@
 //! Process management syscalls
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, get_task_info,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, get_task_info, self,
     }, timer::get_time_us,
-    mm::write_to,
+    mm::{write_to, MapPermission},
 };
 
 #[repr(C)]
@@ -73,15 +73,32 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
+    //trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    if (port & 0x7) == 0 {
+        return -1;
+    }
+    if (port & !0x7) != 0 {
+        return -1;
+    }
+    if (start & (PAGE_SIZE - 1)) != 0 {
+        return -1;
+    }
+    
+    let mut permission = MapPermission::U;
+    if (port & 1) != 0 { permission |= MapPermission::R; }
+    if (port & 2) != 0 { permission |= MapPermission::W; }
+    if (port & 4) != 0 { permission |= MapPermission::X; }
+    task::mmap(start.into(), (start + len).into(), permission)
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    //trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    if (start & (PAGE_SIZE - 1)) != 0 {
+        return -1;
+    }
+    task::munmap(start.into(), (start + len).into())
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

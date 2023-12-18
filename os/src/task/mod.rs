@@ -15,6 +15,7 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::timer::{get_time_ms, get_time_us};
 use crate::trap::TrapContext;
@@ -183,6 +184,26 @@ impl TaskManager {
     fn get_current_task(&self) -> usize {
         self.inner.exclusive_access().current_task
     }
+
+    /// alloc memory
+    pub fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+        let mut manager = TASK_MANAGER.inner.exclusive_access();
+        let cur = manager.current_task;
+        manager
+        .tasks[cur]
+        .memory_set
+        .insert_framed_area(start_va, end_va, permission)
+    }
+
+    /// dealloc memory
+    pub fn munmap(&self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        let mut manager = TASK_MANAGER.inner.exclusive_access();
+        let cur = manager.current_task;
+        manager
+        .tasks[cur]
+        .memory_set
+        .cancel(start_va, end_va)
+    }
 }
 
 /// Run the first task in task list.
@@ -246,4 +267,14 @@ pub fn syscall_count(id: usize) {
 /// get current task id
 pub fn get_current_task() -> usize {
     TASK_MANAGER.get_current_task()
+}
+
+/// alloc memory
+pub fn mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+    TASK_MANAGER.mmap(start_va, end_va, permission)
+}
+
+/// dealloc memory
+pub fn munmap(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    TASK_MANAGER.munmap(start_va, end_va)
 }

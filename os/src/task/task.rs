@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM, BIG_STRIDE};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -74,6 +74,12 @@ pub struct TaskControlBlockInner {
 
     /// start time
     pub start_time: Option<usize>,
+
+    /// run length
+    pub stride: usize,
+
+    /// step length
+    pub pass: usize,
 }
 
 impl TaskControlBlockInner {
@@ -126,6 +132,8 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     start_time: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
+                    stride: 0,
+                    pass: 16,
                 })
             },
         };
@@ -139,6 +147,53 @@ impl TaskControlBlock {
             trap_handler as usize,
         );
         task_control_block
+    }
+
+    /// spawn: create a new process with data
+    pub fn spawn(self : &Arc<Self>, elf_data: &[u8]) -> Arc<Self> {
+        let mut parent_inner = self.inner_exclusive_access();
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
+            .unwrap()
+            .ppn();
+
+        let pid = pid_alloc();
+        let kernel_stack = kstack_alloc();
+        let kernel_stack_top = kernel_stack.get_top();
+        let tcb = Arc::new(TaskControlBlock {
+            pid,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: user_sp,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                    heap_bottom: user_sp,
+                    program_brk: user_sp,
+                    start_time: None,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    stride: 0,
+                    pass: 16,
+                })
+            },
+        });
+        // ...
+        parent_inner.children.push(tcb.clone());
+        let trap_cx : &mut TrapContext = tcb.inner_exclusive_access().get_trap_cx();
+        *trap_cx = TrapContext::app_init_context(
+            entry_point, 
+            user_sp, 
+            KERNEL_SPACE.exclusive_access().token(), 
+            kernel_stack_top,
+            trap_handler as usize);
+        
+        tcb
     }
 
     /// Load a new elf to replace the original application address space and start execution
@@ -201,6 +256,8 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     start_time: None, /* parent_inner.start_time */
                     syscall_times: [0; MAX_SYSCALL_NUM], /* parent_inner.syscall_times | .clone()? */
+                    stride: 0,
+                    pass: 16,
                 })
             },
         });
@@ -245,6 +302,12 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// set priority of a process
+    pub fn set_priority(&self, prio: isize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.pass = BIG_STRIDE / prio as usize;
     }
 }
 

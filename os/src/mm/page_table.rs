@@ -12,13 +12,21 @@ use bitflags::*;
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        /// valid
         const V = 1 << 0;
+        /// read 
         const R = 1 << 1;
+        /// write
         const W = 1 << 2;
+        /// execuate
         const X = 1 << 3;
+        /// user mode
         const U = 1 << 4;
+        /// g
         const G = 1 << 5;
+        /// a
         const A = 1 << 6;
+        /// d
         const D = 1 << 7;
     }
 }
@@ -131,17 +139,21 @@ impl PageTable {
     }
     /// set the map between virtual page number and physical page number
     #[allow(unused)]
-    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) -> isize {
         let pte = self.find_pte_create(vpn).unwrap();
-        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
+        //assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
+        if pte.is_valid() { return -1; }
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        0
     }
     /// remove the map between virtual page number and physical page number
     #[allow(unused)]
-    pub fn unmap(&mut self, vpn: VirtPageNum) {
+    pub fn unmap(&mut self, vpn: VirtPageNum) -> isize {
         let pte = self.find_pte(vpn).unwrap();
-        assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        // assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        if !pte.is_valid() { return -1; }
         *pte = PageTableEntry::empty();
+        0
     }
     /// get the page table entry from the virtual page number
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
@@ -187,7 +199,6 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 
-<<<<<<< HEAD
 /// Translate&Copy a ptr[u8] array end with `\0` to a `String` Vec through page table
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
@@ -218,7 +229,6 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .get_mut()
 }
-=======
 /// write to
 pub fn write_to(dist: *mut u8, src: *const u8, len: usize) {
     let page_table = PageTable::from_token(current_user_token());
@@ -250,4 +260,3 @@ pub fn write_to(dist: *mut u8, src: *const u8, len: usize) {
         start2 += step;
     }
 }
->>>>>>> e525696 (finished sys_task_info and sys_get_time)

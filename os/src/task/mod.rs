@@ -21,11 +21,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{loader::get_app_data_by_name, mm::{VirtAddr, MapPermission}};
 use alloc::sync::Arc;
-use crate::trap::TrapContext;
 use crate::syscall::TaskInfo;
-use crate::timer::{get_time_ms, get_time_us};
+use crate::timer::get_time_us;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
@@ -121,15 +120,36 @@ pub fn add_initproc() {
 
 /// get task info
 pub fn get_task_info() -> TaskInfo {
-    TASK_MANAGER.get_task_info()
+    let tcb = current_task().unwrap();
+    let inner = tcb.inner_exclusive_access();
+    TaskInfo {
+        status: inner.task_status,
+        syscall_times: inner.syscall_times,
+        time: get_time_us() / 1000 - inner.start_time.unwrap()
+    }
 }
 
 /// syscall counter
 pub fn syscall_count(id: usize) {
-    TASK_MANAGER.syscall_count(id);
+    let tcb = current_task().unwrap();
+    let mut inner = tcb.inner_exclusive_access();
+    inner.syscall_times[id] += 1;
 }
 
-/// get current task id
-pub fn get_current_task() -> usize {
-    TASK_MANAGER.get_current_task()
+/// alloc memory
+pub fn mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+    let tcb = current_task().unwrap();
+    let mut inner = tcb.inner_exclusive_access();
+    inner
+    .memory_set
+    .insert_framed_area(start_va, end_va, permission)
+}
+
+/// dealloc memory
+pub fn munmap(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    let tcb = current_task().unwrap();
+    let mut inner = tcb.inner_exclusive_access();
+    inner
+    .memory_set
+    .cancel(start_va, end_va)
 }
